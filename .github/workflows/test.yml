@@ -124,18 +124,6 @@ jobs:
         echo "Available files in dist:"
         ls -la dist/ || echo "dist directory not accessible"
 
-    - name: Stop web server
-      if: always()
-      run: |
-        if [ -f server.pid ]; then
-          PID=$(cat server.pid)
-          echo "Stopping server with PID: $PID"
-          kill $PID 2>/dev/null || echo "Process already stopped"
-          rm server.pid
-        fi
-        # Also kill any remaining python http.server processes
-        pkill -f "python -m http.server" || true
-
     - name: Upload test results
       uses: actions/upload-artifact@v4
       if: always()
@@ -161,3 +149,15 @@ jobs:
       with:
         name: server-logs-${{ matrix.browser }}
         path: server.log
+
+    - name: Stop web server
+      if: always()
+      run: |
+        if [ -f server.pid ]; then
+          PID=$(cat server.pid)
+          echo "Stopping server with PID: $PID"
+          kill $PID 2>/dev/null || echo "Process already stopped"
+          rm server.pid
+        fi
+        # Also kill any remaining python http.server processes
+        pkill -f "python -m http.server" || true
