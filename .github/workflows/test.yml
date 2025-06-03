@@ -71,7 +71,7 @@ jobs:
         fi
 
     - name: Upload test results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: test-results-${{ matrix.browser }}
@@ -83,7 +83,7 @@ jobs:
         pytest tests/ --browser=${{ matrix.browser }} --headless --html=report.html --self-contained-html
     
     - name: Upload HTML report
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: html-report-${{ matrix.browser }}
