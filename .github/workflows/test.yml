@@ -103,7 +103,7 @@ jobs:
     - name: Run tests
       run: |
         echo "Starting tests with base URL: http://localhost:8000"
-        pytest tests/ --browser=${{ matrix.browser }} --headless --junitxml=test-results.xml -v
+        pytest tests/ --browser=${{ matrix.browser }} --maxfail=0 --headless --junitxml=test-results.xml -v
       env:
         BASE_URL: http://localhost:8000
 
@@ -134,7 +134,7 @@ jobs:
     - name: Generate HTML report
       if: always()
       run: |
-        pytest tests/ --browser=${{ matrix.browser }} --headless --html=report.html --self-contained-html || true
+        pytest tests/ --browser=${{ matrix.browser }} --maxfail=0 --headless --html=report.html --self-contained-html || true
     
     - name: Upload HTML report
       uses: actions/upload-artifact@v4
