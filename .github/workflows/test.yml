@@ -35,40 +35,106 @@ jobs:
       if: matrix.browser == 'firefox'
       uses: browser-actions/setup-firefox@latest
 
+    - name: Verify dist directory exists
+      run: |
+        if [ ! -d "dist" ]; then
+          echo "Error: dist directory not found"
+          echo "Available directories:"
+          ls -la
+          exit 1
+        fi
+        echo "Contents of dist directory:"
+        ls -la dist/
+
     - name: Start web server
       run: |
         cd dist
-        nohup python -m http.server 8000 > ../server.log 2>&1 &
-        echo $! > ../server.pid
+        echo "Starting server in directory: $(pwd)"
+        echo "Available files:"
+        ls -la
+        # Start server and capture PID more reliably
+        python -m http.server 8000 > ../server.log 2>&1 &
+        SERVER_PID=$!
+        echo $SERVER_PID > ../server.pid
+        echo "Server started with PID: $SERVER_PID"
+        # Give server a moment to initialize
+        sleep 2
         
     - name: Wait for server to start
       run: |
-        for i in {1..30}; do
-          if curl -f http://localhost:8000 >/dev/null 2>&1; then
+        echo "Waiting for server to become available..."
+        for i in {1..60}; do
+          if curl -f -s -o /dev/null http://localhost:8000; then
             echo "Server is ready after $i seconds"
+            echo "Server response:"
+            curl -s http://localhost:8000 | head -10
             break
           fi
-          if [ $i -eq 30 ]; then
-            echo "Server failed to start within 30 seconds"
-            cat server.log
+          if [ $i -eq 60 ]; then
+            echo "Server failed to start within 60 seconds"
+            echo "Server log:"
+            cat server.log || echo "No server log found"
+            echo "Checking if server process is running:"
+            if [ -f server.pid ]; then
+              PID=$(cat server.pid)
+              if ps -p $PID > /dev/null; then
+                echo "Server process $PID is running"
+              else
+                echo "Server process $PID is not running"
+              fi
+            fi
+            echo "Checking port 8000:"
+            netstat -tuln | grep :8000 || echo "Port 8000 is not listening"
             exit 1
           fi
+          echo "Attempt $i: Server not ready yet, waiting..."
           sleep 1
         done
 
+    - name: Debug server status
+      run: |
+        echo "Final server check:"
+        curl -v http://localhost:8000 || true
+        echo "Process list:"
+        ps aux | grep python || true
+        echo "Network connections:"
+        netstat -tuln | grep :8000 || echo "No connections on port 8000"
+
     - name: Run tests
       run: |
-        pytest tests/ --browser=${{ matrix.browser }} --headless --junitxml=test-results.xml
+        echo "Starting tests with base URL: http://localhost:8000"
+        pytest tests/ --browser=${{ matrix.browser }} --headless --junitxml=test-results.xml -v
       env:
         BASE_URL: http://localhost:8000
+
+    - name: Debug on failure
+      if: failure()
+      run: |
+        echo "Test failed, checking server status:"
+        if [ -f server.pid ]; then
+          PID=$(cat server.pid)
+          if ps -p $PID > /dev/null; then
+            echo "Server process $PID is still running"
+          else
+            echo "Server process $PID has died"
+          fi
+        fi
+        echo "Server log:"
+        cat server.log || echo "No server log found"
+        echo "Available files in dist:"
+        ls -la dist/ || echo "dist directory not accessible"
 
     - name: Stop web server
       if: always()
       run: |
         if [ -f server.pid ]; then
-          kill $(cat server.pid) || true
+          PID=$(cat server.pid)
+          echo "Stopping server with PID: $PID"
+          kill $PID 2>/dev/null || echo "Process already stopped"
           rm server.pid
         fi
+        # Also kill any remaining python http.server processes
+        pkill -f "python -m http.server" || true
 
     - name: Upload test results
       uses: actions/upload-artifact@v4
@@ -80,7 +146,7 @@ jobs:
     - name: Generate HTML report
       if: always()
       run: |
-        pytest tests/ --browser=${{ matrix.browser }} --headless --html=report.html --self-contained-html
+        pytest tests/ --browser=${{ matrix.browser }} --headless --html=report.html --self-contained-html || true
     
     - name: Upload HTML report
       uses: actions/upload-artifact@v4
@@ -88,4 +154,10 @@ jobs:
       with:
         name: html-report-${{ matrix.browser }}
         path: report.html
-      
+
+    - name: Upload server logs
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: server-logs-${{ matrix.browser }}
+        path: server.log
